@@ -5,17 +5,15 @@ let selectedCell = null;
 // 1. Cliquer sur une case pour ouvrir
 document.getElementById('grid').addEventListener('click', (e) => {
     const cell = e.target.closest('th, td');
-    if (!cell || cell.tagName === 'TH' && cell.innerText) return; // Évite les numéros de ligne
+    if (!cell || (cell.tagName === 'TH' && cell.innerText)) return;
 
     selectedCell = {
+        element: cell, // On stocke l'élément pour changer sa couleur plus tard
         row: cell.parentElement.className,
-        col: cell.cellIndex,
-        mode: modeSelect.value
+        col: cell.cellIndex
     };
-
-    if (selectedCell.mode === "options") return showMessage("aucun mode choisis");
     
-    dialog.showModal();
+    document.querySelector('dialog:not(.message)').showModal();
 });
 
 // 2. Bouton Annuler
@@ -29,12 +27,21 @@ document.getElementById('cancel').onclick = () => {
 document.getElementById('ok').onclick = async () => {
     const title = document.getElementById('noteTitle').value;
     const content = document.getElementById('noteContent').value;
+    const mode = document.getElementById('agendaMode').value;
     const user = window.Pripri.auth.currentUser;
 
-    if (!Pripri.isConnected) return showMessage("Connecte-toi !");
+    // 1. Vérification du mode
+    if (mode === "options") {
+        showMessage("Aucun mode choisi");
+        return;
+    }
 
-    // Chemin : users / UID / agenda / ANNEE_MOIS_JOUR
-    // On crée un ID unique basé sur la position dans la grille pour l'exemple
+    // 2. Vérification de connexion
+    if (!user) {
+        showMessage("Connecte-toi d'abord");
+        return;
+    }
+
     const dateId = `2026_${selectedCell.col}_${selectedCell.row}`;
     
     try {
@@ -42,17 +49,22 @@ document.getElementById('ok').onclick = async () => {
         const docRef = doc(window.Pripri.db, "users", user.uid, "agenda", dateId);
 
         await setDoc(docRef, {
-            [selectedCell.mode]: {
-                title: title,
-                text: content,
-                updatedAt: new Date()
-            }
+            [mode]: { title, text: content, updatedAt: new Date() }
         }, { merge: true });
 
-        console.log("Enregistré !");
-        showMessage("enregistré avec succes", dialog.close());
+        // 3. Succès : on ferme la modale de saisie via le callback de showMessage
+        showMessage("Enregistré avec succès", () => {
+            const entryDialog = document.querySelector('dialog:not(.message)');
+            if (entryDialog) entryDialog.close();
+            
+            // Optionnel : Colorer la case dans la grille pour montrer qu'elle est pleine
+            if (selectedCell.element) {
+                selectedCell.element.style.backgroundColor = "rgba(0, 255, 0, 0.2)";
+            }
+        });
+
     } catch (error) {
-        console.error("Erreur:", error);
-        showMessage("échec de l'enregistrement");
+        console.error(error);
+        showMessage("Échec de l'enregistrement");
     }
 };
